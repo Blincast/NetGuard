@@ -1264,7 +1264,7 @@ public class ServiceSinkhole extends VpnService implements SharedPreferences.OnS
         boolean lan = prefs.getBoolean("lan", false);
         boolean ip6 = prefs.getBoolean("ip6", true);
         boolean filter = prefs.getBoolean("filter", false);
-        boolean system = prefs.getBoolean("manage_system", false);
+        boolean system = prefs.getBoolean("manage_system", true);
 
         // Build VPN service
         Builder builder = new Builder();
@@ -1835,7 +1835,7 @@ public class ServiceSinkhole extends VpnService implements SharedPreferences.OnS
     private void prepareNotify(List<Rule> listRule) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         boolean notify = prefs.getBoolean("notify_access", false);
-        boolean system = prefs.getBoolean("manage_system", false);
+        boolean system = prefs.getBoolean("manage_system", true);
 
         lock.writeLock().lock();
         mapNotify.clear();

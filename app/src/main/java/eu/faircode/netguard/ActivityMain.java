@@ -144,7 +144,7 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
         running = true;
 
         final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        boolean enabled = prefs.getBoolean("enabled", false);
+        boolean enabled = prefs.getBoolean("enabled", true);
         boolean initialized = prefs.getBoolean("initialized", false);
 
         // Upgrade
@@ -705,7 +705,7 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
             updateApplicationList(null);
 
             LinearLayout llSystem = findViewById(R.id.llSystem);
-            boolean system = prefs.getBoolean("manage_system", false);
+            boolean system = prefs.getBoolean("manage_system", true);
             boolean hint = prefs.getBoolean("hint_system", true);
             llSystem.setVisibility(!system && hint ? View.VISIBLE : View.GONE);
 
@@ -863,7 +863,7 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
 
         menu.findItem(R.id.menu_malware).setVisible(false);
 
-        if (prefs.getBoolean("manage_system", false)) {
+        if (prefs.getBoolean("manage_system", true)) {
             menu.findItem(R.id.menu_app_user).setChecked(prefs.getBoolean("show_user", true));
             menu.findItem(R.id.menu_app_system).setChecked(prefs.getBoolean("show_system", false));
         } else {
@@ -1010,7 +1010,7 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
         // Hint system applications
         final LinearLayout llSystem = findViewById(R.id.llSystem);
         Button btnSystem = findViewById(R.id.btnSystem);
-        boolean system = prefs.getBoolean("manage_system", false);
+        boolean system = prefs.getBoolean("manage_system", true);
         boolean hintSystem = prefs.getBoolean("hint_system", true);
         llSystem.setVisibility(!system && hintSystem ? View.VISIBLE : View.GONE);
         btnSystem.setOnClickListener(new View.OnClickListener() {

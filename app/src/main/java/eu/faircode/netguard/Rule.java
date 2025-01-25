@@ -34,6 +34,7 @@ import androidx.preference.PreferenceManager;
 
 import org.xmlpull.v1.XmlPullParser;
 
+import java.io.Console;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -185,11 +186,25 @@ public class Rule {
                     this.system = cursor.getInt(cursor.getColumnIndex("system")) > 0;
                     this.internet = cursor.getInt(cursor.getColumnIndex("internet")) > 0;
                     this.enabled = cursor.getInt(cursor.getColumnIndex("enabled")) > 0;
+
+                    if (this.packageName == "com.google.android.gms") {
+                        this.wifi_blocked = false;
+                        this.wifi_default = false;
+
+                        Log.d("NETGUARD RULE", "Blocking wifi for GMS");
+                    }
                 } else {
                     this.name = getLabel(info, context);
                     this.system = isSystem(info.packageName, context);
                     this.internet = hasInternet(info.packageName, context);
                     this.enabled = isEnabled(info, context);
+
+                    if (this.packageName == "com.google.android.gms") {
+                        this.wifi_blocked = false;
+                        this.wifi_default = false;
+
+                        Log.d("NETGUARD RULE", "Blocking wifi for GMS");
+                    }
 
                     dh.addApp(this.packageName, this.name, this.system, this.internet, this.enabled);
                 }
@@ -219,7 +234,7 @@ public class Rule {
             boolean default_screen_other = prefs.getBoolean("screen_other", false);
             boolean default_roaming = prefs.getBoolean("whitelist_roaming", true);
 
-            boolean manage_system = prefs.getBoolean("manage_system", false);
+            boolean manage_system = prefs.getBoolean("manage_system", true);
             boolean screen_on = prefs.getBoolean("screen_on", true);
             boolean show_user = prefs.getBoolean("show_user", true);
             boolean show_system = prefs.getBoolean("show_system", false);
