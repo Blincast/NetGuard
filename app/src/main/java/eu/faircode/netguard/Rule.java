@@ -234,10 +234,10 @@ public class Rule {
             boolean default_screen_other = prefs.getBoolean("screen_other", false);
             boolean default_roaming = prefs.getBoolean("whitelist_roaming", true);
 
-            boolean manage_system = prefs.getBoolean("manage_system", true);
+            boolean manage_system = true;
             boolean screen_on = prefs.getBoolean("screen_on", true);
             boolean show_user = prefs.getBoolean("show_user", true);
-            boolean show_system = prefs.getBoolean("show_system", false);
+            boolean show_system = true;
             boolean show_nointernet = prefs.getBoolean("show_nointernet", true);
             boolean show_disabled = prefs.getBoolean("show_disabled", true);
 

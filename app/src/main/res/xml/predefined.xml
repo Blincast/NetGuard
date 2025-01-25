@@ -32,11 +32,19 @@
         package="com.google.android.backuptransport" />
 
     <wifi
-        blocked="false"
+        blocked="true"
         package="com.google.android.gms" />
     <other
-        blocked="false"
+        blocked="true"
         package="com.google.android.gms" />
+
+
+    <wifi
+        blocked="true"
+        package="com.android.vending" />
+    <other
+        blocked="true"
+        package="com.android.vending" />
 
     <wifi
         blocked="false"
