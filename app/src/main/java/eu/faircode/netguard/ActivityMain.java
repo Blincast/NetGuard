@@ -35,6 +35,7 @@ import android.net.VpnService;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
@@ -222,6 +223,51 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
         if (filter && Util.isPrivateDns(ActivityMain.this))
             Toast.makeText(ActivityMain.this, R.string.msg_private_dns, Toast.LENGTH_LONG).show();
 
+        if (enabled)
+            checkDoze();
+
+        showMessage("Atualizando...\nNÃO UTILIZE O CONTROLE REMOTO!", 5000, this::askVPN);
+
+        // Notification permissions
+        TextView tvNotifications = findViewById(R.id.tvNotifications);
+        tvNotifications.setVisibility(View.GONE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            tvNotifications.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
+                }
+            });
+
+        // Listen for preference changes
+        prefs.registerOnSharedPreferenceChangeListener(this);
+
+        // Listen for rule set changes
+        IntentFilter ifr = new IntentFilter(ACTION_RULES_CHANGED);
+        LocalBroadcastManager.getInstance(this).registerReceiver(onRulesChanged, ifr);
+
+        // Listen for queue changes
+        IntentFilter ifq = new IntentFilter(ACTION_QUEUE_CHANGED);
+        LocalBroadcastManager.getInstance(this).registerReceiver(onQueueChanged, ifq);
+
+        // Listen for added/removed applications
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        intentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        intentFilter.addDataScheme("package");
+        ContextCompat.registerReceiver(this, packageChangedReceiver, intentFilter, ContextCompat.RECEIVER_NOT_EXPORTED);
+
+        // First use
+        if (!initialized) {
+            prefs.edit().putBoolean("initialized", true).apply();
+        }
+
+        // Handle intent
+        checkExtras(getIntent());
+    }
+
+    private void askVPN() {
+        final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         try {
             final Intent prepare = VpnService.prepare(ActivityMain.this);
             if (prepare == null) {
@@ -244,182 +290,6 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
             Log.e(TAG, ex.toString() + "\n" + Log.getStackTraceString(ex));
             prefs.edit().putBoolean("enabled", false).apply();
         }
-
-        if (enabled)
-            checkDoze();
-
-        // Network is metered
-        ivMetered.setOnLongClickListener(new View.OnLongClickListener() {
-            @Override
-            public boolean onLongClick(View view) {
-                int location[] = new int[2];
-                actionView.getLocationOnScreen(location);
-                Toast toast = Toast.makeText(ActivityMain.this, R.string.msg_metered, Toast.LENGTH_LONG);
-                toast.setGravity(
-                        Gravity.TOP | Gravity.LEFT,
-                        location[0] + ivMetered.getLeft(),
-                        Math.round(location[1] + ivMetered.getBottom() - toast.getView().getPaddingTop()));
-                toast.show();
-                return true;
-            }
-        });
-
-        getSupportActionBar().setDisplayShowCustomEnabled(true);
-        getSupportActionBar().setCustomView(actionView);
-
-        // Disabled warning
-        TextView tvDisabled = findViewById(R.id.tvDisabled);
-        tvDisabled.setVisibility(enabled ? View.GONE : View.VISIBLE);
-
-        // Notification permissions
-        TextView tvNotifications = findViewById(R.id.tvNotifications);
-        tvNotifications.setVisibility(View.GONE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-            tvNotifications.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
-                }
-            });
-
-        // Application list
-        RecyclerView rvApplication = findViewById(R.id.rvApplication);
-        rvApplication.setHasFixedSize(false);
-        LinearLayoutManager llm = new LinearLayoutManager(this);
-        llm.setAutoMeasureEnabled(true);
-        rvApplication.setLayoutManager(llm);
-        adapter = new AdapterRule(this, findViewById(R.id.vwPopupAnchor));
-        rvApplication.setAdapter(adapter);
-
-        // Swipe to refresh
-        TypedValue tv = new TypedValue();
-        getTheme().resolveAttribute(R.attr.colorPrimary, tv, true);
-        swipeRefresh = findViewById(R.id.swipeRefresh);
-        swipeRefresh.setColorSchemeColors(Color.WHITE, Color.WHITE, Color.WHITE);
-        swipeRefresh.setProgressBackgroundColorSchemeColor(tv.data);
-        swipeRefresh.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
-            @Override
-            public void onRefresh() {
-                Rule.clearCache(ActivityMain.this);
-                ServiceSinkhole.reload("pull", ActivityMain.this, false);
-                updateApplicationList(null);
-            }
-        });
-
-        // Hint usage
-        final LinearLayout llUsage = findViewById(R.id.llUsage);
-        Button btnUsage = findViewById(R.id.btnUsage);
-        boolean hintUsage = prefs.getBoolean("hint_usage", true);
-        llUsage.setVisibility(hintUsage ? View.VISIBLE : View.GONE);
-        btnUsage.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                prefs.edit().putBoolean("hint_usage", false).apply();
-                llUsage.setVisibility(View.GONE);
-                showHints();
-            }
-        });
-
-        final LinearLayout llFairEmail = findViewById(R.id.llFairEmail);
-        TextView tvFairEmail = findViewById(R.id.tvFairEmail);
-        tvFairEmail.setMovementMethod(LinkMovementMethod.getInstance());
-        Button btnFairEmail = findViewById(R.id.btnFairEmail);
-        boolean hintFairEmail = prefs.getBoolean("hint_fairemail", true);
-        llFairEmail.setVisibility(hintFairEmail ? View.VISIBLE : View.GONE);
-        btnFairEmail.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                prefs.edit().putBoolean("hint_fairemail", false).apply();
-                llFairEmail.setVisibility(View.GONE);
-            }
-        });
-
-        showHints();
-
-        // Listen for preference changes
-        prefs.registerOnSharedPreferenceChangeListener(this);
-
-        // Listen for rule set changes
-        IntentFilter ifr = new IntentFilter(ACTION_RULES_CHANGED);
-        LocalBroadcastManager.getInstance(this).registerReceiver(onRulesChanged, ifr);
-
-        // Listen for queue changes
-        IntentFilter ifq = new IntentFilter(ACTION_QUEUE_CHANGED);
-        LocalBroadcastManager.getInstance(this).registerReceiver(onQueueChanged, ifq);
-
-        // Listen for added/removed applications
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
-        intentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
-        intentFilter.addDataScheme("package");
-        ContextCompat.registerReceiver(this, packageChangedReceiver, intentFilter, ContextCompat.RECEIVER_NOT_EXPORTED);
-
-        // First use
-        if (!initialized) {
-            // Create view
-            LayoutInflater inflater = LayoutInflater.from(this);
-            View view = inflater.inflate(R.layout.first, null, false);
-
-            TextView tvFirst = view.findViewById(R.id.tvFirst);
-            TextView tvEula = view.findViewById(R.id.tvEula);
-            TextView tvPrivacy = view.findViewById(R.id.tvPrivacy);
-            tvFirst.setMovementMethod(LinkMovementMethod.getInstance());
-            tvEula.setMovementMethod(LinkMovementMethod.getInstance());
-            tvPrivacy.setMovementMethod(LinkMovementMethod.getInstance());
-
-            prefs.edit().putBoolean("initialized", true).apply();
-        }
-
-        // Fill application list
-        updateApplicationList(getIntent().getStringExtra(EXTRA_SEARCH));
-
-        // Update IAB SKUs
-        try {
-            iab = new IAB(new IAB.Delegate() {
-                @Override
-                public void onReady(IAB iab) {
-                    try {
-                        iab.updatePurchases();
-
-                        if (!IAB.isPurchased(ActivityPro.SKU_LOG, ActivityMain.this))
-                            prefs.edit().putBoolean("log", false).apply();
-                        if (!IAB.isPurchased(ActivityPro.SKU_THEME, ActivityMain.this)) {
-                            if (!"teal".equals(prefs.getString("theme", "teal")))
-                                prefs.edit().putString("theme", "teal").apply();
-                        }
-                        if (!IAB.isPurchased(ActivityPro.SKU_NOTIFY, ActivityMain.this))
-                            prefs.edit().putBoolean("install", false).apply();
-                        if (!IAB.isPurchased(ActivityPro.SKU_SPEED, ActivityMain.this))
-                            prefs.edit().putBoolean("show_stats", false).apply();
-                    } catch (Throwable ex) {
-                        Log.e(TAG, ex.toString() + "\n" + Log.getStackTraceString(ex));
-                    } finally {
-                        iab.unbind();
-                    }
-                }
-            }, this);
-            iab.bind();
-        } catch (Throwable ex) {
-            Log.e(TAG, ex.toString() + "\n" + Log.getStackTraceString(ex));
-        }
-
-        // Support
-        LinearLayout llSupport = findViewById(R.id.llSupport);
-        TextView tvSupport = findViewById(R.id.tvSupport);
-
-        SpannableString content = new SpannableString(getString(R.string.app_support));
-        content.setSpan(new UnderlineSpan(), 0, content.length(), 0);
-        tvSupport.setText(content);
-
-        llSupport.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                startActivity(getIntentPro(ActivityMain.this));
-            }
-        });
-
-        // Handle intent
-        checkExtras(getIntent());
     }
 
     @Override
@@ -434,8 +304,7 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
         setIntent(intent);
 
         if (Build.VERSION.SDK_INT >= MIN_SDK) {
-            if (intent.hasExtra(EXTRA_REFRESH))
-                updateApplicationList(intent.getStringExtra(EXTRA_SEARCH));
+            if (intent.hasExtra(EXTRA_REFRESH)) {}
             else
                 updateSearch(intent.getStringExtra(EXTRA_SEARCH));
             checkExtras(intent);
@@ -574,6 +443,13 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
                 on.show();
 
                 checkDoze();
+
+                showMessage("Atualização concluída", 5000, () -> {
+                    Intent intent = new Intent(Intent.ACTION_MAIN);
+                    intent.addCategory(Intent.CATEGORY_HOME);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                });
             } else if (resultCode == RESULT_CANCELED)
                 Toast.makeText(this, R.string.msg_vpn_cancelled, Toast.LENGTH_LONG).show();
 
@@ -610,41 +486,6 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
     @Override
     public void onSharedPreferenceChanged(SharedPreferences prefs, String name) {
         Log.i(TAG, "Preference " + name + "=" + prefs.getAll().get(name));
-        if ("enabled".equals(name)) {
-            // Get enabled
-            boolean enabled = prefs.getBoolean(name, false);
-
-            // Display disabled warning
-            TextView tvDisabled = findViewById(R.id.tvDisabled);
-            tvDisabled.setVisibility(enabled ? View.GONE : View.VISIBLE);
-
-            // Check switch state
-            SwitchCompat swEnabled = getSupportActionBar().getCustomView().findViewById(R.id.swEnabled);
-            if (swEnabled.isChecked() != enabled)
-                swEnabled.setChecked(enabled);
-
-        } else if ("whitelist_wifi".equals(name) ||
-                "screen_on".equals(name) ||
-                "screen_wifi".equals(name) ||
-                "whitelist_other".equals(name) ||
-                "screen_other".equals(name) ||
-                "whitelist_roaming".equals(name) ||
-                "show_user".equals(name) ||
-                "show_system".equals(name) ||
-                "show_nointernet".equals(name) ||
-                "show_disabled".equals(name) ||
-                "sort".equals(name) ||
-                "imported".equals(name)) {
-            updateApplicationList(null);
-
-            final LinearLayout llWhitelist = findViewById(R.id.llWhitelist);
-            boolean screen_on = prefs.getBoolean("screen_on", true);
-            boolean whitelist_wifi = prefs.getBoolean("whitelist_wifi", false);
-            boolean whitelist_other = prefs.getBoolean("whitelist_other", false);
-            boolean hintWhitelist = prefs.getBoolean("hint_whitelist", true);
-            llWhitelist.setVisibility(!(whitelist_wifi || whitelist_other) && screen_on && hintWhitelist ? View.VISIBLE : View.GONE);
-        } else if ("theme".equals(name) || "dark_theme".equals(name))
-            recreate();
     }
 
     private DatabaseHelper.AccessChangedListener accessChangedListener = new DatabaseHelper.AccessChangedListener() {
@@ -681,8 +522,7 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
                         adapter.setDisconnected();
                         ivMetered.setVisibility(View.INVISIBLE);
                     }
-                } else
-                    updateApplicationList(null);
+                }
         }
     };
 
@@ -702,7 +542,6 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
         public void onReceive(Context context, Intent intent) {
             Log.i(TAG, "Received " + intent);
             Util.logExtras(intent);
-            updateApplicationList(null);
         }
     };
 
@@ -903,96 +742,12 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
         }
     }
 
-    private void showHints() {
-        final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        boolean hintUsage = prefs.getBoolean("hint_usage", true);
-
-        // Hint white listing
-        final LinearLayout llWhitelist = findViewById(R.id.llWhitelist);
-        Button btnWhitelist = findViewById(R.id.btnWhitelist);
-        boolean whitelist_wifi = prefs.getBoolean("whitelist_wifi", false);
-        boolean whitelist_other = prefs.getBoolean("whitelist_other", false);
-        boolean hintWhitelist = prefs.getBoolean("hint_whitelist", true);
-        llWhitelist.setVisibility(!(whitelist_wifi || whitelist_other) && hintWhitelist && !hintUsage ? View.VISIBLE : View.GONE);
-        btnWhitelist.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                prefs.edit().putBoolean("hint_whitelist", false).apply();
-                llWhitelist.setVisibility(View.GONE);
-            }
-        });
-
-        // Hint push messages
-        final LinearLayout llPush = findViewById(R.id.llPush);
-        Button btnPush = findViewById(R.id.btnPush);
-        boolean hintPush = prefs.getBoolean("hint_push", true);
-        llPush.setVisibility(hintPush && !hintUsage ? View.VISIBLE : View.GONE);
-        btnPush.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                prefs.edit().putBoolean("hint_push", false).apply();
-                llPush.setVisibility(View.GONE);
-            }
-        });
-
-        // Hint system applications
-        final LinearLayout llSystem = findViewById(R.id.llSystem);
-        Button btnSystem = findViewById(R.id.btnSystem);
-        llSystem.setVisibility(View.GONE);
-        btnSystem.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                prefs.edit().putBoolean("hint_system", false).apply();
-                llSystem.setVisibility(View.GONE);
-            }
-        });
-    }
-
     private void checkExtras(Intent intent) {
         // Approve request
         if (intent.hasExtra(EXTRA_APPROVE)) {
             Log.i(TAG, "Requesting VPN approval");
             swEnabled.toggle();
         }
-    }
-
-    private void updateApplicationList(final String search) {
-        Log.i(TAG, "Update search=" + search);
-
-        new AsyncTask<Object, Object, List<Rule>>() {
-            private boolean refreshing = true;
-
-            @Override
-            protected void onPreExecute() {
-                swipeRefresh.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (refreshing)
-                            swipeRefresh.setRefreshing(true);
-                    }
-                });
-            }
-
-            @Override
-            protected List<Rule> doInBackground(Object... arg) {
-                return Rule.getRules(false, ActivityMain.this);
-            }
-
-            @Override
-            protected void onPostExecute(List<Rule> result) {
-                if (running) {
-                    if (adapter != null) {
-                        adapter.set(result);
-                        updateSearch(search);
-                    }
-
-                    if (swipeRefresh != null) {
-                        refreshing = false;
-                        swipeRefresh.setRefreshing(false);
-                    }
-                }
-            }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     private void updateSearch(String search) {
@@ -1234,6 +989,23 @@ public class ActivityMain extends AppCompatActivity implements SharedPreferences
 
     private void menu_apps() {
         startActivity(getIntentApps(this));
+    }
+
+    private void showMessage(String message, long delayMillis, Runnable callback) {
+        // Update message
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage(message)
+                .setCancelable(false);
+
+        AlertDialog alertDialog = builder.create();
+        alertDialog.show();
+
+        new Handler().postDelayed(() -> {
+            callback.run();
+            if (alertDialog.isShowing()) {
+                alertDialog.dismiss();
+            }
+        }, delayMillis);
     }
 
     private static Intent getIntentPro(Context context) {
